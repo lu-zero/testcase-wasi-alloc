@@ -1,12 +1,14 @@
 # Strange allocation/addressing failure
 
+Any alignment above 3 (64bit) fails even if `v128` should require 128 bit alignment.
+
 ``` sh
 $ rustup target add wasm32-wasi
 $ cargo build --target wasm32-wasi
 ```
 
 ``` sh
-$ wasmtime target/wasm32-wasi/debug/testcase.wasm
+$ wasmtime target/wasm32-wasi/debug/testcase.wasm -- 5
 ...
 index at 131070 len 307200
 index at 131071 len 307200
@@ -15,7 +17,22 @@ Segmentation fault
 ```
 
 ``` sh
-$ wavm run --abi=wasi target/wasm32-wasi/debug/testcase.wasm
+$ wasmtime target/wasm32-wasi/debug/testcase.wasm -- 4
+...
+index at 131070 len 307200
+index at 131071 len 307200
+index at 131072 len 307200
+Error: failed to run main module `target/wasm32-wasi/debug/testcase.wasm`
+
+Caused by:
+    0: failed to invoke `_start`
+    1: wasm trap: out of bounds memory access, source location: @6999
+       wasm backtrace:
+         0: <unknown>!testcase::PlaneData::new::hdfb5845c549bf326
+```
+
+``` sh
+$ wavm run --abi=wasi target/wasm32-wasi/debug/testcase.wasm ${align}
 ...
 index at 131072 len 307200
 Runtime exception: wavm.outOfBoundsMemoryAccess(+1703936)

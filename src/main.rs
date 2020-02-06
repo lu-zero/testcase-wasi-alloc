@@ -7,6 +7,7 @@ pub struct PlaneData {
   ptr: std::ptr::NonNull<u8>,
   _marker: PhantomData<u8>,
   len: usize,
+  align: usize,
 }
 
 unsafe impl Send for PlaneData {}
@@ -14,7 +15,7 @@ unsafe impl Sync for PlaneData {}
 
 impl Clone for PlaneData {
   fn clone(&self) -> Self {
-    let mut pd = unsafe { Self::new_uninitialized(self.len) };
+    let mut pd = unsafe { Self::new_uninitialized(self.len, self.align) };
 
     pd.copy_from_slice(self);
 
@@ -47,33 +48,30 @@ impl std::ops::DerefMut for PlaneData {
 impl std::ops::Drop for PlaneData {
   fn drop(&mut self) {
     unsafe {
-      dealloc(self.ptr.as_ptr() as *mut u8, Self::layout(self.len));
+      dealloc(self.ptr.as_ptr() as *mut u8, Self::layout(self.len, self.align));
     }
   }
 }
 
 impl PlaneData {
-  /// Data alignment in bytes.
-  const DATA_ALIGNMENT_LOG2: usize = 5;
-
-  unsafe fn layout(len: usize) -> Layout {
+  unsafe fn layout(len: usize, align: usize) -> Layout {
     Layout::from_size_align_unchecked(
       len * mem::size_of::<u8>(),
-      1 << Self::DATA_ALIGNMENT_LOG2,
+      1 << align,
     )
   }
 
-  unsafe fn new_uninitialized(len: usize) -> Self {
+  unsafe fn new_uninitialized(len: usize, align: usize) -> Self {
     let ptr = {
-      let ptr = alloc(Self::layout(len)) as *mut u8;
+      let ptr = alloc(Self::layout(len, align)) as *mut u8;
       std::ptr::NonNull::new_unchecked(ptr)
     };
 
-    PlaneData { ptr, len, _marker: PhantomData }
+    PlaneData { ptr, len, align, _marker: PhantomData }
   }
 
-  pub fn new(len: usize) -> Self {
-    let mut pd = unsafe { Self::new_uninitialized(len) };
+  pub fn new(len: usize, align: usize) -> Self {
+    let mut pd = unsafe { Self::new_uninitialized(len, align) };
 
     for (i, v) in pd.iter_mut().enumerate() {
       eprintln!("index at {} len {}", i, len);
@@ -85,6 +83,7 @@ impl PlaneData {
 }
 
 fn main() {
-    println!("Hello, world!");
-    let _pd = PlaneData::new(640 * 480);
+    use std::str::FromStr;
+    let align = usize::from_str(&std::env::args().nth(1).unwrap_or("5".into())).unwrap();
+    let _pd = PlaneData::new(640 * 480, align);
 }
